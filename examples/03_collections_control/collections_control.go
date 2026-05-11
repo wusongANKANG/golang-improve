@@ -43,7 +43,7 @@ func SliceSharingDemo() (base []int, shared []int, safeCopy []int) {
 	copy(base, []int{1, 2, 3})
 
 	shared = base[:2]
-	shared = append(shared, 9)
+	shared = append(shared, []int{5, 6, 7}...)
 
 	safeCopy = append([]int(nil), base...)
 	safeCopy[0] = 100

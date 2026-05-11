@@ -7,7 +7,7 @@ func Greeting(name string) string {
 		name = "gopher"
 	}
 
-	return fmt.Sprintf("hello, %s", name)
+	return fmt.Sprintf("hello welcome, %s", name)
 }
 
 func ProgramShape() []string {
