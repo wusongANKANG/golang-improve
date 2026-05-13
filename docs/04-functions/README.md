@@ -531,7 +531,7 @@ func ReadFile(name string) error {
 - 包装错误。
 - 和 `recover` 配合兜底。
 
-## 六、`panic` 和 `error` 有什么区别
+## 十六、`panic` 和 `error` 有什么区别
 
 要先建立一个非常重要的原则：
 
@@ -550,7 +550,7 @@ return 0, ErrDivideByZero
 - 明显不该发生的内部状态损坏
 - 框架层防御性兜底
 
-## 七、`recover` 只能在 `defer` 里生效
+## 十七、`recover` 只能在 `defer` 里生效
 
 当前模块的示例：
 
@@ -586,7 +586,114 @@ result, recovered := SafeExecute(func() string {
 - `result == "recovered: boom"`
 - `recovered == "boom"`
 
-## 八、为什么 `recover` 不该被滥用
+## 十八、`recover` 除了拦截 panic 还有什么用
+
+严格说，`recover` 的底层能力只有一个：在 deferred 函数中捕获正在传播的 `panic`，让程序恢复正常执行。
+
+但在工程实践里，这个能力会衍生出几个很重要的用途。
+
+### 1. 防止局部 panic 扩散到整个程序
+
+比如一个 HTTP 请求处理过程中 panic 了，如果没有兜底，这个 panic 可能会让当前 goroutine 异常退出，严重时影响服务稳定性。
+
+框架或中间件常用 `recover` 做最后一道保护：
+
+```go
+func RecoverMiddleware(next func()) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("request panic: %v\n", r)
+		}
+	}()
+
+	next()
+}
+```
+
+它的目标不是假装错误没发生，而是避免单个请求把更大的执行流程拖垮。
+
+### 2. 把 panic 转成普通 error
+
+有些边界层更希望对外返回 `error`，而不是让 panic 继续向外传播。
+
+当前模块里的 `SafeCall` 就是这种思路：
+
+```go
+func SafeCall(fn func() int) (result int, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("safe call panic: %v", r)
+		}
+	}()
+
+	return fn(), nil
+}
+```
+
+这样调用方就可以继续使用熟悉的错误处理方式：
+
+```go
+value, err := SafeCall(func() int {
+	panic("boom")
+})
+if err != nil {
+	return err
+}
+```
+
+### 3. 记录 panic 现场，方便排查问题
+
+`recover` 拿到 panic 值后，通常会配合日志、堆栈信息、请求上下文一起记录。
+
+常见信息包括：
+
+- panic 的具体值
+- 当前请求 ID
+- 用户 ID 或任务 ID
+- 调用栈
+- 输入参数摘要
+
+例如：
+
+```go
+defer func() {
+	if r := recover(); r != nil {
+		fmt.Printf("panic: %v\n", r)
+	}
+}()
+```
+
+生产代码里一般会用日志库记录，而不是简单 `fmt.Printf`。
+
+### 4. 保护后台任务和 worker
+
+后台任务、消息消费、定时任务里，经常会用 `recover` 防止某一次任务 panic 后导致整个 worker 停掉。
+
+例如：
+
+```go
+func RunJob(job func()) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("job panic: %v\n", r)
+		}
+	}()
+
+	job()
+}
+```
+
+这种写法适合放在任务执行边界，而不是散落在每个业务函数里。
+
+### 5. 在库或框架边界做兜底转换
+
+有些库内部可能会用 panic 表达“内部不可恢复错误”，但对外 API 更希望保持 `error` 风格。
+
+这时可以在公共入口处统一 `recover`，把内部 panic 转成对调用方更友好的错误。
+
+但要注意：这只适合非常清楚边界的代码。普通业务逻辑里不建议到处 `recover`，否则错误会被隐藏得很深。
+
+## 十九、为什么 `recover` 不该被滥用
 
 很多初学者会觉得：既然能 `recover`，那是不是以后都不用好好处理错误了？
 
@@ -604,7 +711,11 @@ result, recovered := SafeExecute(func() string {
 - 用来吞掉本该上报的错误。
 - 用来隐藏程序设计问题。
 
-## 九、配套测试怎么读
+一句话记住：
+
+`recover` 更适合放在边界层兜底，比如中间件、worker、任务调度器、框架入口；业务可预期错误仍然应该返回 `error`。
+
+## 二十、配套测试怎么读
 
 测试文件在 [functions_test.go](/home/wusong/workspace/future-2026/golang-improve/examples/04_functions/functions_test.go)。
 
@@ -633,7 +744,7 @@ func TestSafeExecuteRecover(t *testing.T) {
 
 这两个测试基本把“普通错误”和“异常崩溃”两条路径都展示出来了。
 
-## 十、怎么运行和怎么 debug
+## 二十一、怎么运行和怎么 debug
 
 运行模块：
 
@@ -659,14 +770,14 @@ go test -run TestSafeExecuteRecover -v ./examples/04_functions
 - `Divide(10, 0)` 为什么不崩溃而是返回错误。
 - `SafeExecute` 里的 deferred 函数是在什么时候触发的。
 
-## 十一、常见误区
+## 二十二、常见误区
 
 - 把 `panic` 当成普通错误处理。
 - 认为闭包只是语法糖，不理解它会保留状态。
 - 不清楚 `defer` 的执行时机。
 - 误以为 `recover` 在任何位置都能用。
 
-## 十二、工作里的映射
+## 二十三、工作里的映射
 
 这一章几乎覆盖了 Go 日常函数设计风格：
 
@@ -675,7 +786,7 @@ go test -run TestSafeExecuteRecover -v ./examples/04_functions
 - 闭包在回调、封装、配置注入里非常常见。
 - `panic/recover` 常出现在兜底层，而不是业务层。
 
-## 十三、建议练习
+## 二十四、建议练习
 
 可以自己补两个练习：
 

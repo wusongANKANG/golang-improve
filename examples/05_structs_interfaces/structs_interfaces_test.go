@@ -25,3 +25,25 @@ func TestSendAll(t *testing.T) {
 		t.Fatalf("messages[0] = %q", messages[0])
 	}
 }
+
+func TestUserCanImplementMultipleInterfaces(t *testing.T) {
+	user := &User{Name: "alice", Email: "alice@example.com"}
+
+	var notifier Notifier = user
+	var renamer Renamer = user
+
+	renamer.Rename("bob")
+
+	if got := notifier.Notify(); got != "notify bob via alice@example.com" {
+		t.Fatalf("Notify() = %q, want %q", got, "notify bob via alice@example.com")
+	}
+}
+
+func TestRenameAndNotify(t *testing.T) {
+	user := &User{Name: "alice", Email: "alice@example.com"}
+
+	got := RenameAndNotify(user, "bob")
+	if got != "notify bob via alice@example.com" {
+		t.Fatalf("RenameAndNotify() = %q, want %q", got, "notify bob via alice@example.com")
+	}
+}

@@ -90,7 +90,11 @@ result := wordutil.FirstNonEmpty("", "Go")
 
 ## 六、泛型解决的是什么问题
 
-泛型最适合解决“逻辑相同，只是类型不同”的重复代码问题。
+泛型可以先用一句话理解：
+
+泛型就是写一份逻辑，让它可以适用于多种类型，同时仍然保留类型安全。
+
+它最适合解决“逻辑相同，只是类型不同”的重复代码问题。
 
 看这个例子：
 
@@ -119,7 +123,122 @@ func SumFloat64(items []float64) float64
 
 逻辑完全一样，只是元素类型不同。这个时候泛型就很合适。
 
-## 七、类型约束怎么理解
+比如没有泛型时，你可能真的会写出三份求和函数：
+
+```go
+func SumInt(items []int) int {
+	total := 0
+	for _, item := range items {
+		total += item
+	}
+	return total
+}
+
+func SumFloat64(items []float64) float64 {
+	total := 0.0
+	for _, item := range items {
+		total += item
+	}
+	return total
+}
+```
+
+但这两段代码除了类型不同，逻辑完全一样。泛型就是为了把这类重复收敛成一份。
+
+## 七、`Sum[T Number]` 里的 `T Number` 是什么作用
+
+当前模块里的泛型函数是：
+
+```go
+func Sum[T Number](items []T) T {
+	var total T
+	for _, item := range items {
+		total += item
+	}
+
+	return total
+}
+```
+
+可以把函数签名拆开看：
+
+```go
+func Sum[T Number](items []T) T
+```
+
+这里每一部分都有明确作用：
+
+- `Sum` 是函数名。
+- `T` 是类型参数，表示这里先不写死具体类型。
+- `Number` 是对 `T` 的约束，表示 `T` 必须满足 `Number` 允许的类型范围。
+- `items []T` 表示参数是一个 `T` 类型的切片。
+- 最后的 `T` 表示返回值和元素类型一致。
+
+所以当你这样调用：
+
+```go
+Sum([]int{1, 2, 3})
+```
+
+编译器会推断：
+
+```go
+T == int
+```
+
+当你这样调用：
+
+```go
+Sum([]float64{1.5, 2.5})
+```
+
+编译器会推断：
+
+```go
+T == float64
+```
+
+这就是泛型的核心价值：同一份 `Sum` 逻辑，可以在不同具体类型下工作。
+
+## 八、为什么一定要写 `T Number`
+
+如果只写一个完全不受限制的 `T`，编译器就不知道 `T` 能不能相加。
+
+比如下面这句：
+
+```go
+total += item
+```
+
+不是所有类型都能执行 `+`：
+
+- `int` 可以。
+- `float64` 可以。
+- `string` 虽然也能 `+`，但那是拼接语义。
+- `map` 不可以。
+- `struct` 默认不可以。
+
+所以 `Number` 的作用就是告诉编译器：
+
+- 这个泛型函数可以接收多种类型。
+- 但这些类型必须属于 `Number` 约束范围。
+- 因此函数体里可以安全地做加法。
+
+当前模块里的约束是：
+
+```go
+type Number interface {
+	~int | ~int64 | ~float64
+}
+```
+
+这表示 `T` 只能是这些数值类型，或者底层类型是这些数值类型的自定义类型。
+
+一句话总结：
+
+`T Number` 就是在告诉编译器：`T` 是一个类型参数，但它不能随便是什么类型，它必须是 `Number` 允许的数字类型。
+
+## 九、类型约束怎么理解
 
 `Number` 这个接口不是运行时接口，而是类型参数约束。
 
@@ -137,7 +256,17 @@ type Number interface {
 
 这里的 `~` 表示不仅支持精确类型，也支持底层类型是这些类型的自定义类型。
 
-## 八、`comparable` 约束是干什么的
+例如：
+
+```go
+type Score int
+```
+
+因为 `Score` 的底层类型是 `int`，所以它也满足 `~int` 这个约束。
+
+这就是 `~` 的价值：它不仅允许 `int` 本身，也允许基于 `int` 定义出来的业务类型。
+
+## 十、`comparable` 约束是干什么的
 
 看另一个例子：
 
@@ -161,7 +290,7 @@ func Unique[T comparable](items []T) []T {
 
 这里要求 `T comparable`，因为 map 的 key 必须是可比较类型。这个约束本质上是在告诉编译器：只有能做 `==` 比较的类型，才能拿来去重。
 
-## 九、泛型不是越多越好
+## 十一、泛型不是越多越好
 
 这是很重要的边界意识。
 
@@ -178,7 +307,7 @@ func Unique[T comparable](items []T) []T {
 
 如果一个函数只服务于一个具体业务模型，通常直接写具体类型反而更清晰。
 
-## 十、当前模块里的几个示例怎么用
+## 十二、当前模块里的几个示例怎么用
 
 求和：
 
@@ -200,7 +329,7 @@ normalized := NormalizeWords([]string{" Go ", "", "Gopher"})
 first := FirstKeyword("", "  ", "Go")
 ```
 
-## 十一、配套测试怎么读
+## 十三、配套测试怎么读
 
 测试文件在 [packages_generics_test.go](/home/wusong/workspace/future-2026/golang-improve/examples/06_packages_generics/packages_generics_test.go)。
 
@@ -212,7 +341,7 @@ first := FirstKeyword("", "  ", "Go")
 
 这三个测试分别对应泛型数值计算、泛型容器处理、跨包函数调用。
 
-## 十二、怎么运行和怎么 debug
+## 十四、怎么运行和怎么 debug
 
 运行模块：
 
@@ -223,17 +352,19 @@ go test -v ./examples/06_packages_generics
 调试时建议重点看：
 
 - `Sum` 在 `[]int` 和 `[]float64` 两种输入下是如何工作的。
+- `T` 在不同调用里分别被推断成了什么具体类型。
 - `Unique` 的 `seen` map 是怎样去重的。
 - `NormalizeWords` 是怎样调用 [wordutil.go](/home/wusong/workspace/future-2026/golang-improve/examples/06_packages_generics/wordutil/wordutil.go) 里的逻辑的。
 
-## 十三、常见误区
+## 十五、常见误区
 
 - 把包和模块混为一谈。
 - 过早拆出很多包，导致结构碎片化。
 - 所有重复代码都想用泛型统一。
 - 不理解 `comparable` 和类型约束的边界。
+- 看到 `T` 就以为它能代表任意类型，忽略了后面的约束。
 
-## 十四、工作里的映射
+## 十六、工作里的映射
 
 这一章会直接影响：
 
@@ -242,7 +373,7 @@ go test -v ./examples/06_packages_generics
 - 是否需要引入泛型减少重复代码。
 - 是否能把“工具抽象”和“业务抽象”区分开。
 
-## 十五、建议练习
+## 十七、建议练习
 
 可以自己补两个函数：
 

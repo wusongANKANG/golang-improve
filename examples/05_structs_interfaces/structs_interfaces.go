@@ -6,6 +6,10 @@ type Notifier interface {
 	Notify() string
 }
 
+type Renamer interface {
+	Rename(name string)
+}
+
 type User struct {
 	Name  string
 	Email string
@@ -38,4 +42,12 @@ func SendAll(notifiers []Notifier) []string {
 	}
 
 	return messages
+}
+
+func RenameAndNotify(user interface {
+	Notifier
+	Renamer
+}, name string) string {
+	user.Rename(name)
+	return user.Notify()
 }
